@@ -6,6 +6,10 @@ Current version: 1.1.
 
 Project page: <https://github.com/OnjLouis/MidiToMove>
 
+## Companion tool
+
+If you want to go the other way, [MoveToMidi](https://github.com/OnjLouis/MoveToMidi) converts Ableton Move and Ableton Note `.ablbundle` sets to standard MIDI files.
+
 ## Build
 
 ```powershell
