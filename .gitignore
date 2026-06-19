@@ -1,0 +1,12 @@
+portable/
+release-stage/
+bin/
+obj/
+*.zip
+*.ini
+*.log
+*.tmp
+*.user
+*.suo
+*.ablbundle
+token.txt
