@@ -17,9 +17,9 @@ using System.Windows.Forms;
 [assembly: System.Reflection.AssemblyCompany("Andre Louis")]
 [assembly: System.Reflection.AssemblyProduct("MidiToMove")]
 [assembly: System.Reflection.AssemblyCopyright("Copyright (c) Andre Louis")]
-[assembly: System.Reflection.AssemblyVersion("1.0.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersion("1.0")]
+[assembly: System.Reflection.AssemblyVersion("1.1.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("1.1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersion("1.1")]
 
 namespace MidiToMove
 {
@@ -138,7 +138,7 @@ namespace MidiToMove
     internal sealed class MainForm : Form
     {
         private const string AppName = "MidiToMove";
-        private const string Version = "1.0";
+        private const string Version = "1.1";
         private const string ProjectUrl = "https://github.com/OnjLouis/MidiToMove";
         private readonly AppSettings settings = AppSettings.Load();
         private readonly ListView resultsList;
@@ -157,6 +157,7 @@ Keyboard
 Ctrl+O: Open one or more MIDI files.
 Ctrl+F: Open a folder and process every .mid and .midi file in that folder.
 Ctrl+Comma: Open Preferences.
+Ctrl+F1: Open the project page on GitHub.
 F1: Show this help.
 F4: Review results.
 Alt+F4: Close the program.
@@ -164,6 +165,7 @@ Alt+F4: Close the program.
 Updates
 Help > Check for Updates checks GitHub Releases.
 Help > Version History shows the latest GitHub release notes.
+Help > Project on GitHub opens the project page.
 Help > Donate opens onj.me/donate if you want to support development.
 Preferences > Updates controls automatic checks and quiet update installs.
 
@@ -283,6 +285,7 @@ Controller automation is intentionally not exported in this first build.";
             var help = new ToolStripMenuItem("&Help");
             help.DropDownItems.Add(new ToolStripMenuItem("&Check for Updates...", null, delegate { CheckForUpdates(true, true); }, Keys.Shift | Keys.F1));
             help.DropDownItems.Add(new ToolStripMenuItem("&Version History...", null, delegate { ShowVersionHistoryDialog(); }));
+            help.DropDownItems.Add(new ToolStripMenuItem("&Project on GitHub", null, delegate { OpenProjectPage(); }, Keys.Control | Keys.F1));
             help.DropDownItems.Add(new ToolStripMenuItem("&Donate...", null, delegate { OpenDonatePage(); }));
             help.DropDownItems.Add(new ToolStripSeparator());
             help.DropDownItems.Add(new ToolStripMenuItem("MidiToMove &Help", null, delegate { ShowHelp(); }, Keys.F1));
@@ -308,6 +311,7 @@ Controller automation is intentionally not exported in this first build.";
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
+            if (keyData == (Keys.Control | Keys.F1)) { OpenProjectPage(); return true; }
             if (keyData == (Keys.Control | Keys.Oemcomma)) { ShowPreferences(); return true; }
             return base.ProcessCmdKey(ref msg, keyData);
         }
@@ -453,7 +457,7 @@ Controller automation is intentionally not exported in this first build.";
 
         private void ShowAbout()
         {
-            ShowTextDialog("About MidiToMove", "MidiToMove " + Version + Environment.NewLine + Environment.NewLine + "Accessible standard MIDI to Ableton Move and Note bundle converter." + Environment.NewLine + Environment.NewLine + "Created by Andre Louis with Codex.");
+            ShowTextDialog("About MidiToMove", "MidiToMove " + Version + Environment.NewLine + Environment.NewLine + "Accessible standard MIDI to Ableton Move and Note bundle converter." + Environment.NewLine + Environment.NewLine + "Project page:" + Environment.NewLine + ProjectUrl + Environment.NewLine + Environment.NewLine + "Created by Andre Louis with Codex.");
         }
 
         private void ShowPreferences()
@@ -476,7 +480,7 @@ Controller automation is intentionally not exported in this first build.";
                 UseWaitCursor = true;
                 var releases = UpdateService.FetchReleases(ProjectUrl, Version);
                 var release = UpdateService.LatestVersionedRelease(releases) ?? UpdateService.FetchLatestRelease(ProjectUrl, Version);
-                var latest = release == null ? string.Empty : (release.TagName ?? string.Empty).Trim();
+                var latest = release == null ? string.Empty : (release.tag_name ?? string.Empty).Trim();
                 System.Version current;
                 System.Version remote;
                 if (System.Version.TryParse(Version, out current) && System.Version.TryParse(latest.TrimStart('v', 'V'), out remote) && remote > current)
@@ -533,7 +537,7 @@ Controller automation is intentionally not exported in this first build.";
                     if (!recorded) BeginInvoke((MethodInvoker)delegate { settings.LastAutomaticUpdateCheckUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture); SaveSettingsNonFatal(); });
                     var releases = UpdateService.FetchReleases(ProjectUrl, Version);
                     var release = UpdateService.LatestVersionedRelease(releases) ?? UpdateService.FetchLatestRelease(ProjectUrl, Version);
-                    var latest = release == null ? string.Empty : (release.TagName ?? string.Empty).Trim();
+                    var latest = release == null ? string.Empty : (release.tag_name ?? string.Empty).Trim();
                     System.Version current;
                     System.Version remote;
                     if (!System.Version.TryParse(Version, out current) || !System.Version.TryParse(latest.TrimStart('v', 'V'), out remote) || remote <= current) return;
@@ -552,7 +556,7 @@ Controller automation is intentionally not exported in this first build.";
 
         private void ShowUpdateAvailableDialog(GitHubReleaseInfo release, string latest, string releaseNotes)
         {
-            var releaseUrl = release == null || string.IsNullOrWhiteSpace(release.HtmlUrl) ? ProjectUrl + "/releases" : release.HtmlUrl;
+            var releaseUrl = release == null || string.IsNullOrWhiteSpace(release.html_url) ? ProjectUrl + "/releases" : release.html_url;
             var zipAsset = UpdateService.FindPortableZipAsset(release);
             using (var dialog = new Form())
             {
@@ -571,7 +575,7 @@ Controller automation is intentionally not exported in this first build.";
                 if (zipAsset != null)
                 {
                     var install = new Button { Text = "&Download and install", AutoSize = true, AccessibleName = "Download and install update" };
-                    install.Click += delegate { dialog.DialogResult = DialogResult.OK; dialog.Close(); StartUpdate(zipAsset.BrowserDownloadUrl); };
+                    install.Click += delegate { dialog.DialogResult = DialogResult.OK; dialog.Close(); StartUpdate(zipAsset.browser_download_url); };
                     buttons.Controls.Add(install);
                     dialog.AcceptButton = install;
                 }
@@ -594,8 +598,8 @@ Controller automation is intentionally not exported in this first build.";
                 UseWaitCursor = true;
                 var releases = UpdateService.FetchReleases(ProjectUrl, Version);
                 var release = UpdateService.LatestVersionedRelease(releases) ?? UpdateService.FetchLatestRelease(ProjectUrl, Version);
-                var version = release == null ? Version : (release.TagName ?? Version).Trim().TrimStart('v', 'V');
-                var notes = UpdateService.FormatReleaseNotesForDialog(release == null ? string.Empty : release.Body, "No release notes were provided for this update.");
+                var version = release == null ? Version : (release.tag_name ?? Version).Trim().TrimStart('v', 'V');
+                var notes = UpdateService.FormatReleaseNotesForDialog(release == null ? string.Empty : release.body, "No release notes were provided for this update.");
                 ShowTextDialog("Version History - " + version, "Latest release: " + version + Environment.NewLine + Environment.NewLine + notes);
             }
             catch (Exception ex) { MessageBox.Show(this, "Could not check updates. GitHub releases may not exist yet, or the network request failed." + Environment.NewLine + Environment.NewLine + ex.Message, "Version History", MessageBoxButtons.OK, MessageBoxIcon.Information); }
@@ -604,25 +608,35 @@ Controller automation is intentionally not exported in this first build.";
 
         private void OpenDonatePage()
         {
+            OpenExternalPage("https://onj.me/donate", "Could not open the donation page.");
+        }
+
+        private void OpenProjectPage()
+        {
+            OpenExternalPage(ProjectUrl, "Could not open the project page.");
+        }
+
+        private void OpenExternalPage(string url, string errorTitle)
+        {
             try
             {
-                Process.Start(new ProcessStartInfo { FileName = "https://onj.me/donate", UseShellExecute = true });
+                Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, "Could not open the donation page." + Environment.NewLine + Environment.NewLine + ex.Message, "Donate", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(this, errorTitle + Environment.NewLine + Environment.NewLine + ex.Message, AppName, MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
 
         private bool TryStartUpdate(GitHubReleaseInfo release, bool showErrors)
         {
             var zipAsset = UpdateService.FindPortableZipAsset(release);
-            if (zipAsset == null || string.IsNullOrWhiteSpace(zipAsset.BrowserDownloadUrl))
+            if (zipAsset == null || string.IsNullOrWhiteSpace(zipAsset.browser_download_url))
             {
                 if (showErrors) MessageBox.Show(this, "This GitHub release does not include a downloadable ZIP package. Please open the release page instead.", "Check for Updates", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return false;
             }
-            StartUpdate(zipAsset.BrowserDownloadUrl);
+            StartUpdate(zipAsset.browser_download_url);
             return true;
         }
 
@@ -1180,18 +1194,12 @@ Controller automation is intentionally not exported in this first build.";
         public string html_url { get; set; }
         public string body { get; set; }
         public List<GitHubReleaseAsset> assets { get; set; }
-        public string TagName { get { return tag_name; } }
-        public string HtmlUrl { get { return html_url; } }
-        public string Body { get { return body; } }
-        public List<GitHubReleaseAsset> Assets { get { return assets ?? new List<GitHubReleaseAsset>(); } }
     }
 
     internal sealed class GitHubReleaseAsset
     {
         public string name { get; set; }
         public string browser_download_url { get; set; }
-        public string Name { get { return name; } }
-        public string BrowserDownloadUrl { get { return browser_download_url; } }
     }
 
     internal static class UpdateService
@@ -1222,10 +1230,10 @@ Controller automation is intentionally not exported in this first build.";
         public static GitHubReleaseAsset FindPortableZipAsset(GitHubReleaseInfo release)
         {
             if (release == null) return null;
-            return release.Assets.Where(a => a != null && !string.IsNullOrWhiteSpace(a.BrowserDownloadUrl) && !string.IsNullOrWhiteSpace(a.Name))
-                .Where(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(a => a.Name.IndexOf("portable", StringComparison.OrdinalIgnoreCase) >= 0)
-                .ThenByDescending(a => a.Name.IndexOf("midi", StringComparison.OrdinalIgnoreCase) >= 0)
+            return (release.assets ?? new List<GitHubReleaseAsset>()).Where(a => a != null && !string.IsNullOrWhiteSpace(a.browser_download_url) && !string.IsNullOrWhiteSpace(a.name))
+                .Where(a => a.name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(a => a.name.IndexOf("portable", StringComparison.OrdinalIgnoreCase) >= 0)
+                .ThenByDescending(a => a.name.IndexOf("midi", StringComparison.OrdinalIgnoreCase) >= 0)
                 .FirstOrDefault();
         }
 
@@ -1241,8 +1249,8 @@ Controller automation is intentionally not exported in this first build.";
             if (newer.Count == 0) builder.AppendLine("No release notes were provided for this update.");
             foreach (var item in newer)
             {
-                builder.AppendLine(item.Release.TagName);
-                builder.AppendLine(FormatReleaseNotesForDialog(item.Release.Body, "No release notes were provided for this update."));
+                builder.AppendLine(item.Release.tag_name);
+                builder.AppendLine(FormatReleaseNotesForDialog(item.Release.body, "No release notes were provided for this update."));
                 builder.AppendLine();
             }
             return builder.ToString();
@@ -1326,8 +1334,8 @@ Controller automation is intentionally not exported in this first build.";
                 "  if (-not (Test-Path -LiteralPath (Join-Path $source 'MidiToMove.exe'))) { throw 'The downloaded ZIP does not contain MidiToMove.exe.' }\r\n" +
                 "  Get-Process -Id $pidToWait -ErrorAction SilentlyContinue | Wait-Process\r\n" +
                 "  Get-ChildItem -LiteralPath $source -Force | ForEach-Object {\r\n" +
-                "    if ($_.Name -ieq 'MidiToMove.ini' -or $_.Name -ieq 'MidiToMove failures.log') { return }\r\n" +
-                "    Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $target $_.Name) -Recurse -Force\r\n" +
+                "    if ($_.name -ieq 'MidiToMove.ini' -or $_.name -ieq 'MidiToMove failures.log') { return }\r\n" +
+                "    Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $target $_.name) -Recurse -Force\r\n" +
                 "  }\r\n" +
                 "  Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue\r\n" +
                 "  Start-Process -FilePath $exe\r\n" +
@@ -1348,9 +1356,9 @@ Controller automation is intentionally not exported in this first build.";
 
         private static System.Version ReleaseVersion(GitHubReleaseInfo release)
         {
-            if (release == null || string.IsNullOrWhiteSpace(release.TagName)) return null;
+            if (release == null || string.IsNullOrWhiteSpace(release.tag_name)) return null;
             System.Version version;
-            return System.Version.TryParse(release.TagName.Trim().TrimStart('v', 'V'), out version) ? version : null;
+            return System.Version.TryParse(release.tag_name.Trim().TrimStart('v', 'V'), out version) ? version : null;
         }
 
         private static string PowerShellQuote(string value) { return "'" + (value ?? string.Empty).Replace("'", "''") + "'"; }
@@ -1975,3 +1983,4 @@ Controller automation is intentionally not exported in this first build.";
         }
     }
 }
+
