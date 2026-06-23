@@ -10,6 +10,10 @@ Project page: <https://github.com/OnjLouis/MidiToMove>
 
 If you want to go the other way, [MoveToMidi](https://github.com/OnjLouis/MoveToMidi) converts Ableton Move and Ableton Note `.ablbundle` sets to standard MIDI files.
 
+## Upgrading from 1.0
+
+MidiToMove 1.0 has a known updater bug that can show `Ambiguous match found` when checking for updates. If you are on 1.0, download and install 1.1 manually once. Future update checks work from 1.1 onward.
+
 ## Build
 
 ```powershell
