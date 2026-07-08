@@ -2,7 +2,7 @@
 
 Accessible Windows utility for converting standard MIDI files into Ableton Move and Ableton Note `.ablbundle` sets.
 
-Current version: 1.2.
+Current version: 1.3.
 
 Project page: <https://github.com/OnjLouis/MidiToMove>
 
@@ -56,6 +56,8 @@ The release package includes `MidiToMove.exe`, `README.md`, and `LICENSE.txt`. I
 - Writes Ableton Move and Ableton Note `.ablbundle` files containing `Song.abl`.
 - Uses Move-compatible four-track and eight-scene limits.
 - Preserves tempo, time signature, track names, notes, note lengths, and velocities.
+- Writes Move 2.1 beta-compatible `timeSignature` metadata for non-4/4 MIDI files.
+- Uses 16 bars of the source time signature as each Move clip scene span.
 - Converts CC64 sustain pedal messages into longer note lengths so sustained notes are not truncated on Move.
 - Splits long MIDI files into Move scenes and reports when the source is longer than eight scenes.
 - Rounds each clip loop length to the next bar instead of always using a full 16-bar clip.

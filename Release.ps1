@@ -95,6 +95,8 @@ function Publish-GitHubRelease([string]$version, [string]$zipPath) {
     $releaseBody = @"
 MidiToMove $version
 
+- Writes Move 2.1 beta-compatible timeSignature metadata from the source MIDI time signature.
+- Uses 16 bars of the MIDI time signature as each Move scene span instead of assuming 4/4.
 - Converts CC64 sustain pedal messages into longer note lengths so Move does not truncate sustained notes.
 - Merges split MIDI tracks that share the same name and channel before applying Move's four-track limit.
 - Keeps same-pitch retriggers clean by ending a sustained note at the next matching note start.

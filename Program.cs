@@ -17,9 +17,9 @@ using System.Windows.Forms;
 [assembly: System.Reflection.AssemblyCompany("Andre Louis")]
 [assembly: System.Reflection.AssemblyProduct("MidiToMove")]
 [assembly: System.Reflection.AssemblyCopyright("Copyright (c) Andre Louis")]
-[assembly: System.Reflection.AssemblyVersion("1.2.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("1.2.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersion("1.2")]
+[assembly: System.Reflection.AssemblyVersion("1.3.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("1.3.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersion("1.3")]
 
 namespace MidiToMove
 {
@@ -138,7 +138,7 @@ namespace MidiToMove
     internal sealed class MainForm : Form
     {
         private const string AppName = "MidiToMove";
-        private const string Version = "1.2";
+        private const string Version = "1.3";
         private const string ProjectUrl = "https://github.com/OnjLouis/MidiToMove";
         private readonly AppSettings settings = AppSettings.Load();
         private readonly ListView resultsList;
@@ -1691,36 +1691,37 @@ Other controller automation is intentionally not exported in this first build.";
     internal static class MoveBundleWriter
     {
         public const int MoveSceneLimit = 8;
-        private const double ClipBeats = 64.0;
+        private const double BarsPerScene = 16.0;
 
         public static ConvertResult Write(string sourcePath, string outputPath, MidiFile midi, List<ExportPart> parts, int maximumScenes)
         {
             maximumScenes = Math.Max(1, Math.Min(MoveSceneLimit, maximumScenes));
+            var clipBeats = GetClipBeats(midi);
             int scenesUsed;
             int notesWritten;
-            var song = BuildSong(sourcePath, midi, parts, maximumScenes, out scenesUsed, out notesWritten);
+            var song = BuildSong(sourcePath, midi, parts, maximumScenes, clipBeats, out scenesUsed, out notesWritten);
             var serializer = new JavaScriptSerializer { MaxJsonLength = int.MaxValue, RecursionLimit = 100 };
             var json = serializer.Serialize(song);
 
             StoredZipWriter.WriteSingleFile(outputPath, "Song.abl", new UTF8Encoding(false).GetBytes(json));
 
             var maxBeat = parts.Count == 0 ? 0 : parts.Max(p => p.EndBeat);
-            var sourceSceneCount = Math.Max(1, (int)Math.Ceiling(maxBeat / ClipBeats));
+            var sourceSceneCount = Math.Max(1, (int)Math.Ceiling(maxBeat / clipBeats));
             return new ConvertResult { OutputPath = outputPath, TrackCount = parts.Count, SceneCount = scenesUsed, SourceSceneCount = sourceSceneCount, NoteCount = notesWritten };
         }
 
-        private static Dictionary<string, object> BuildSong(string sourcePath, MidiFile midi, List<ExportPart> parts, int maximumScenes, out int scenesUsed, out int notesWritten)
+        private static Dictionary<string, object> BuildSong(string sourcePath, MidiFile midi, List<ExportPart> parts, int maximumScenes, double clipBeats, out int scenesUsed, out int notesWritten)
         {
             notesWritten = 0;
             var maxBeat = parts.Count == 0 ? 0 : parts.Max(p => p.EndBeat);
             var barBeats = GetBarBeats(midi);
-            scenesUsed = Math.Max(1, Math.Min(maximumScenes, (int)Math.Ceiling(maxBeat / ClipBeats)));
+            scenesUsed = Math.Max(1, Math.Min(maximumScenes, (int)Math.Ceiling(maxBeat / clipBeats)));
             var tracks = new List<object>();
             var colors = new[] { 1, 6, 14, 16 };
             for (var i = 0; i < 4; i++)
             {
                 var part = i < parts.Count ? parts[i] : null;
-                tracks.Add(BuildTrack(part, i, colors[i], scenesUsed, barBeats, ref notesWritten));
+                tracks.Add(BuildTrack(part, i, colors[i], scenesUsed, barBeats, clipBeats, ref notesWritten));
             }
 
             var scenes = new List<object>();
@@ -1732,6 +1733,7 @@ Other controller automation is intentionally not exported in this first build.";
                 { "stepEditorResolution", "1/16" },
                 { "tempo", midi.Tempo },
                 { "globalGrooveAmount", 0.0 },
+                { "timeSignature", new Dictionary<string, object> { { "upper", Math.Max(1, midi.TimeSignatureNumerator) }, { "lower", Math.Max(1, midi.TimeSignatureDenominator) } } },
                 { "rootNote", 0 },
                 { "scale", "major" },
                 { "melodicLayout", "chromatic" },
@@ -1750,6 +1752,11 @@ Other controller automation is intentionally not exported in this first build.";
             return Math.Max(1.0, midi.TimeSignatureNumerator * (4.0 / midi.TimeSignatureDenominator));
         }
 
+        private static double GetClipBeats(MidiFile midi)
+        {
+            return Math.Max(1.0, GetBarBeats(midi) * BarsPerScene);
+        }
+
         private static Dictionary<string, object> BuildSwing16thsGroove()
         {
             var events = new List<object>();
@@ -1765,7 +1772,7 @@ Other controller automation is intentionally not exported in this first build.";
             };
         }
 
-        private static Dictionary<string, object> BuildTrack(ExportPart part, int index, int color, int scenesUsed, double barBeats, ref int notesWritten)
+        private static Dictionary<string, object> BuildTrack(ExportPart part, int index, int color, int scenesUsed, double barBeats, double clipBeats, ref int notesWritten)
         {
             var clipSlots = new List<object>();
             for (var scene = 0; scene < MoveSceneLimit; scene++)
@@ -1773,13 +1780,13 @@ Other controller automation is intentionally not exported in this first build.";
                 object clip = null;
                 if (part != null && scene < scenesUsed)
                 {
-                    var start = scene * ClipBeats;
+                    var start = scene * clipBeats;
                     var notes = new List<object>();
-                    foreach (var note in part.Notes.Where(n => n.StartBeat < start + ClipBeats && n.StartBeat + n.DurationBeat > start).OrderBy(n => n.StartBeat))
+                    foreach (var note in part.Notes.Where(n => n.StartBeat < start + clipBeats && n.StartBeat + n.DurationBeat > start).OrderBy(n => n.StartBeat))
                     {
                         var localStart = Math.Max(0.0, note.StartBeat - start);
                         var noteEnd = note.StartBeat + note.DurationBeat;
-                        var localEnd = Math.Min(ClipBeats, noteEnd - start);
+                        var localEnd = Math.Min(clipBeats, noteEnd - start);
                         var duration = localEnd - localStart;
                         if (duration <= 0) continue;
                         notes.Add(new Dictionary<string, object>
@@ -1795,7 +1802,7 @@ Other controller automation is intentionally not exported in this first build.";
                     {
                         NormalizeSamePitchOverlaps(notes);
                         notesWritten += notes.Count;
-                        var clipLength = GetClipLength(notes, barBeats);
+                        var clipLength = GetClipLength(notes, barBeats, clipBeats);
                         clip = new Dictionary<string, object>
                         {
                             { "isPlaying", scene == 0 },
@@ -1872,7 +1879,7 @@ Other controller automation is intentionally not exported in this first build.";
             }
         }
 
-        private static double GetClipLength(List<object> notes, double barBeats)
+        private static double GetClipLength(List<object> notes, double barBeats, double clipBeats)
         {
             var maxEnd = 0.0;
             foreach (Dictionary<string, object> note in notes)
@@ -1884,7 +1891,7 @@ Other controller automation is intentionally not exported in this first build.";
 
             var unit = barBeats > 0 ? barBeats : 4.0;
             var rounded = Math.Ceiling(Math.Max(0.0001, maxEnd - 0.000001) / unit) * unit;
-            return Math.Max(unit, Math.Min(ClipBeats, rounded));
+            return Math.Max(unit, Math.Min(clipBeats, rounded));
         }
 
         private static Dictionary<string, object> BuildDisabledInstrument(int index)
