@@ -17,9 +17,9 @@ using System.Windows.Forms;
 [assembly: System.Reflection.AssemblyCompany("Andre Louis")]
 [assembly: System.Reflection.AssemblyProduct("MidiToMove")]
 [assembly: System.Reflection.AssemblyCopyright("Copyright (c) Andre Louis")]
-[assembly: System.Reflection.AssemblyVersion("1.1.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("1.1.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersion("1.1")]
+[assembly: System.Reflection.AssemblyVersion("1.2.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("1.2.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersion("1.2")]
 
 namespace MidiToMove
 {
@@ -138,7 +138,7 @@ namespace MidiToMove
     internal sealed class MainForm : Form
     {
         private const string AppName = "MidiToMove";
-        private const string Version = "1.1";
+        private const string Version = "1.2";
         private const string ProjectUrl = "https://github.com/OnjLouis/MidiToMove";
         private readonly AppSettings settings = AppSettings.Load();
         private readonly ListView resultsList;
@@ -193,7 +193,8 @@ After importing the bundle to Move, choose sounds on Move or in Ableton.
 
 Current Export
 Tempo, time signature, track names, notes, note lengths, and velocities are exported.
-Controller automation is intentionally not exported in this first build.";
+Sustain pedal messages, CC64, are converted into longer note lengths where needed.
+Other controller automation is intentionally not exported in this first build.";
 
         public MainForm()
         {
@@ -1385,6 +1386,8 @@ Controller automation is intentionally not exported in this first build.";
                 }
             }
 
+            parts = MergeMatchingParts(parts);
+
             if (combineDrums)
             {
                 var drums = parts.Where(p => p.Channel == 10).ToList();
@@ -1410,6 +1413,31 @@ Controller automation is intentionally not exported in this first build.";
 
             return parts.Where(p => p.Notes.Count > 0).OrderBy(p => combineDrums && p.Channel == 10 ? 0 : 1).ThenBy(p => p.DisplayName, StringComparer.OrdinalIgnoreCase).ToList();
         }
+
+        private static List<ExportPart> MergeMatchingParts(List<ExportPart> parts)
+        {
+            return parts
+                .GroupBy(p => new { Name = NormalizePartName(p.SourceTrackName), p.Channel })
+                .Select(g =>
+                {
+                    var ordered = g.ToList();
+                    if (ordered.Count == 1) return ordered[0];
+                    var first = ordered[0];
+                    return new ExportPart
+                    {
+                        DisplayName = first.SourceTrackName + ", channel " + first.Channel.ToString(CultureInfo.InvariantCulture) + " (" + ordered.Count.ToString(CultureInfo.InvariantCulture) + " MIDI tracks combined)",
+                        Channel = first.Channel,
+                        SourceTrackName = first.SourceTrackName,
+                        Notes = ordered.SelectMany(p => p.Notes).OrderBy(n => n.StartBeat).ToList()
+                    };
+                })
+                .ToList();
+        }
+
+        private static string NormalizePartName(string name)
+        {
+            return string.IsNullOrWhiteSpace(name) ? "" : name.Trim().ToUpperInvariant();
+        }
     }
 
     internal sealed class MidiTrack
@@ -1417,6 +1445,7 @@ Controller automation is intentionally not exported in this first build.";
         public int Index;
         public string Name = "";
         public readonly List<MidiNote> Notes = new List<MidiNote>();
+        public readonly List<MidiSustainEvent> SustainEvents = new List<MidiSustainEvent>();
     }
 
     internal sealed class MidiNote
@@ -1426,6 +1455,13 @@ Controller automation is intentionally not exported in this first build.";
         public double StartBeat;
         public double DurationBeat;
         public int Velocity;
+    }
+
+    internal sealed class MidiSustainEvent
+    {
+        public int Channel;
+        public double Beat;
+        public bool IsDown;
     }
 
     internal sealed class ExportPart
@@ -1461,6 +1497,7 @@ Controller automation is intentionally not exported in this first build.";
                     var track = ParseTrack(chunk, i + 1, midi, format);
                     midi.Tracks.Add(track);
                 }
+                foreach (var track in midi.Tracks) ApplySustainPedal(track);
                 return midi;
             }
         }
@@ -1523,6 +1560,15 @@ Controller automation is intentionally not exported in this first build.";
                     var channel = (status & 0x0F) + 1;
                     var p1 = data1 >= 0 ? data1 : reader.ReadByte();
                     var p2 = (command == 0xC0 || command == 0xD0) ? 0 : reader.ReadByte();
+                    if (command == 0xB0 && p1 == 64)
+                    {
+                        track.SustainEvents.Add(new MidiSustainEvent
+                        {
+                            Channel = channel,
+                            Beat = tick / (double)midi.TicksPerQuarter,
+                            IsDown = p2 >= 64
+                        });
+                    }
                     if (command == 0x90 && p2 > 0)
                     {
                         var key = channel.ToString(CultureInfo.InvariantCulture) + ":" + p1.ToString(CultureInfo.InvariantCulture);
@@ -1551,6 +1597,53 @@ Controller automation is intentionally not exported in this first build.";
                 }
             }
             return track;
+        }
+
+        private static void ApplySustainPedal(MidiTrack track)
+        {
+            if (track.SustainEvents.Count == 0 || track.Notes.Count == 0) return;
+
+            foreach (var channelGroup in track.SustainEvents.GroupBy(e => e.Channel))
+            {
+                var channel = channelGroup.OrderBy(e => e.Beat).ToList();
+                var notes = track.Notes.Where(n => n.Channel == channelGroup.Key).OrderBy(n => n.StartBeat).ToList();
+                foreach (var note in notes)
+                {
+                    var physicalEnd = note.StartBeat + note.DurationBeat;
+                    if (!IsSustainDownAt(channel, physicalEnd)) continue;
+
+                    var release = NextSustainRelease(channel, physicalEnd);
+                    if (!release.HasValue) continue;
+
+                    var nextSamePitch = notes
+                        .Where(n => n.NoteNumber == note.NoteNumber && n.StartBeat > note.StartBeat)
+                        .Select(n => (double?)n.StartBeat)
+                        .FirstOrDefault();
+                    var sustainedEnd = release.Value;
+                    if (nextSamePitch.HasValue && nextSamePitch.Value < sustainedEnd) sustainedEnd = nextSamePitch.Value;
+                    if (sustainedEnd > physicalEnd) note.DurationBeat = sustainedEnd - note.StartBeat;
+                }
+            }
+        }
+
+        private static bool IsSustainDownAt(List<MidiSustainEvent> events, double beat)
+        {
+            bool down = false;
+            foreach (var sustainEvent in events)
+            {
+                if (sustainEvent.Beat > beat) break;
+                down = sustainEvent.IsDown;
+            }
+            return down;
+        }
+
+        private static double? NextSustainRelease(List<MidiSustainEvent> events, double beat)
+        {
+            foreach (var sustainEvent in events)
+            {
+                if (sustainEvent.Beat > beat && !sustainEvent.IsDown) return sustainEvent.Beat;
+            }
+            return null;
         }
 
         private static string DecodeText(byte[] bytes)

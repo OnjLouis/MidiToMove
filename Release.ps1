@@ -95,10 +95,9 @@ function Publish-GitHubRelease([string]$version, [string]$zipPath) {
     $releaseBody = @"
 MidiToMove $version
 
-- Fixes GitHub update checks in the app.
-- Adds Ctrl+F1 and Help > Project on GitHub.
-- Adds Help > Donate.
-- Aligns About and executable metadata with the other accessible tools.
+- Converts CC64 sustain pedal messages into longer note lengths so Move does not truncate sustained notes.
+- Merges split MIDI tracks that share the same name and channel before applying Move's four-track limit.
+- Keeps same-pitch retriggers clean by ending a sustained note at the next matching note start.
 "@
     try {
         $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repoFullName/releases/tags/$tag" -Headers $headers
